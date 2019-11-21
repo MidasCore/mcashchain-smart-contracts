@@ -1,0 +1,47 @@
+{
+    "parserOptions": {
+        "sourceType": "module",
+        "ecmaVersion": 8,
+        "ecmaFeatures": {
+            "jsx": true,
+            "experimentalObjectRestSpread": true
+        }
+    },
+    "globals": {
+        "document": false,
+        "grecaptcha": false,
+        "expect": false,
+        "google": false,
+        "Headway": false,
+        "Stripe": false
+    },
+    "rules": {
+        "comma-dangle": [
+            "error",
+            "always-multiline"
+        ],
+        "linebreak-style": 0,
+        "max-len": [
+            "error",
+            {
+                "code": 120
+            }
+        ],
+        "no-param-reassign": [
+            "warn",
+            {
+                "props": false
+            }
+        ],
+        "no-unused-vars": "warn",
+        "quotes": [
+            "error",
+            "single"
+        ],
+        "semi": [
+            2,
+            "always"
+        ],
+        "no-console": 0
+    }
+}

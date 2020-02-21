@@ -64,8 +64,14 @@ library SafeMath {
     }
 }
 
+contract ERC20 {
+    function transfer(address _to, uint256 _value) public returns (bool);
+}
+
 contract M1ToMcashUnidexSwap {
     using SafeMath for uint256;
+
+    uint256 constant ONE_DAY_IN_SECONDS = 24 * 60 * 60;
 
     uint256 constant BPS_MULTIPLE = 100000000;
     address payable constant BURN_ADDRESS = address(0x3218c66df4defcdcbb183f457bdeed8939c08952d5); // MAAAAAAAAAAAAAAAAAAAAAAAAAAAHF57Ay
@@ -88,6 +94,13 @@ contract M1ToMcashUnidexSwap {
     uint256 public burnMinAmount;
 
     uint16 public affRatePer10000;
+
+    uint256 public totalM1TradeVolume = 0;
+    uint256 public totalMcashTradeVolume = 0;
+
+    uint256[] public tradeTsArray;
+    mapping(uint256 => uint256) public m1Ts2Trade;
+    mapping(uint256 => uint256) public mcashTs2Trade;
 
     // Standard contract ownership and administratorship.
     address payable public owner;
@@ -144,7 +157,7 @@ contract M1ToMcashUnidexSwap {
 
     function setLiquidityParams(uint256 _m1MinCapTrade, uint256 _m1MaxCapTrade,
         uint256 _mcashMinCapTrade, uint256 _mcashMaxCapTrade) external onlyOwnerOrAdmin {
-        require(changingRatePer10000 == 0 || _mcashMaxCapTrade.mul(changingRatePer10000) < BPS_MULTIPLE, "_mcashMaxCapTrade is set too high");
+        require(changingRatePer10000 == 0 || _mcashMaxCapTrade.mul(changingRatePer10000) < BPS_MULTIPLE.mul(BPS_MULTIPLE), "_mcashMaxCapTrade is set too high");
         m1MinCapTrade = _m1MinCapTrade;
         m1MaxCapTrade = _m1MaxCapTrade;
         mcashMinCapTrade = _mcashMinCapTrade;
@@ -152,7 +165,7 @@ contract M1ToMcashUnidexSwap {
     }
 
     function setTradeRatioParams(uint16 _commissionInPer10000, uint16 _changingRatePer10000, uint256 _m1McashTradeRatioInBps) external onlyOwnerOrAdmin {
-        require(mcashMaxCapTrade == 0 || _changingRatePer10000 == 0 || mcashMaxCapTrade.mul(_changingRatePer10000) < BPS_MULTIPLE, "_changingRatePer10000 is set too high");
+        require(mcashMaxCapTrade == 0 || _changingRatePer10000 == 0 || mcashMaxCapTrade.mul(_changingRatePer10000) < BPS_MULTIPLE.mul(BPS_MULTIPLE), "_changingRatePer10000 is set too high");
         commissionInPer10000 = _commissionInPer10000;
         changingRatePer10000 = _changingRatePer10000;
         m1McashTradeRatioInBps = _m1McashTradeRatioInBps;
@@ -244,6 +257,11 @@ contract M1ToMcashUnidexSwap {
                 address(BURN_ADDRESS).transfer(burnAmount);
                 emit Burn(srcTokenId, burnAmount);
             }
+            // for volume stats (no need SafeMath here to avoid revert when adding overflow)
+            mcashTs2Trade[now] += srcAmount;
+            totalMcashTradeVolume += srcAmount;
+            m1Ts2Trade[now] += currentDestTradeAmount;
+            totalM1TradeVolume += currentDestTradeAmount;
         } else {
             destAddress.transfer(currentDestTradeAmount);
             // every 10k MCASH: increase 1.0%
@@ -259,8 +277,24 @@ contract M1ToMcashUnidexSwap {
                 address(BURN_ADDRESS).transfer(burnAmount);
                 emit Burn(srcTokenId, burnAmount);
             }
+            // for volume stats (no need SafeMath here to avoid revert when adding overflow)
+            m1Ts2Trade[now] += srcAmount;
+            totalM1TradeVolume += srcAmount;
+            mcashTs2Trade[now] += currentDestTradeAmount;
+            totalMcashTradeVolume += currentDestTradeAmount;
         }
+        tradeTsArray.push(now);
         emit Trade(srcTokenId, destTokenId, srcAmount, currentDestTradeAmount, refWallet);
+    }
+
+    function get24hTradeAmount(uint256 tokenId) public view returns (uint256) {
+        uint256 i;
+        uint256 amount24h = 0;
+        for (i = tradeTsArray.length - 1; i >= 0; i--) {
+            if (tradeTsArray[i] + ONE_DAY_IN_SECONDS < now) break;
+            amount24h += (tokenId == 0) ? mcashTs2Trade[tradeTsArray[i]] : m1Ts2Trade[tradeTsArray[i]];
+        }
+        return amount24h;
     }
 
     function withdraw(uint256 tokenId, uint256 amount, address payable destination) public onlyOwner returns (bool) {
@@ -272,6 +306,14 @@ contract M1ToMcashUnidexSwap {
         }
         emit WithdrawFunds(tokenId, amount, destination);
         return true;
+    }
+
+    event EmergencyERC20Drain(address erc20Token, address owner, uint256 amount);
+
+    // owner can drain tokens that are sent here by mistake
+    function emergencyERC20Drain(ERC20 erc20Token, uint amount) external onlyOwner {
+        emit EmergencyERC20Drain(address(erc20Token), owner, amount);
+        erc20Token.transfer(owner, amount);
     }
 
     // All funds are transferred to contract owner.

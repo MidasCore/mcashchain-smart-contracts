@@ -288,11 +288,15 @@ contract M1ToMcashUnidexSwap {
     }
 
     function get24hTradeAmount(uint256 tokenId) public view returns (uint256) {
-        uint256 i;
+        if (tradeTsArray.length == 0)
+            return 0;
+        uint256 i = tradeTsArray.length - 1;
         uint256 amount24h = 0;
-        for (i = tradeTsArray.length - 1; i >= 0; i--) {
+        while (true) {
             if (tradeTsArray[i] + ONE_DAY_IN_SECONDS < now) break;
             amount24h += (tokenId == 0) ? mcashTs2Trade[tradeTsArray[i]] : m1Ts2Trade[tradeTsArray[i]];
+            if (i == 0) break;
+            i--;
         }
         return amount24h;
     }

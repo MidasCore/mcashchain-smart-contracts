@@ -144,6 +144,7 @@ contract M1ToMcashUnidexSwap {
 
     function setLiquidityParams(uint256 _m1MinCapTrade, uint256 _m1MaxCapTrade,
         uint256 _mcashMinCapTrade, uint256 _mcashMaxCapTrade) external onlyOwnerOrAdmin {
+        require(changingRatePer10000 == 0 || _mcashMaxCapTrade.mul(changingRatePer10000) < BPS_MULTIPLE, "_mcashMaxCapTrade is set too high");
         m1MinCapTrade = _m1MinCapTrade;
         m1MaxCapTrade = _m1MaxCapTrade;
         mcashMinCapTrade = _mcashMinCapTrade;
@@ -151,6 +152,7 @@ contract M1ToMcashUnidexSwap {
     }
 
     function setTradeRatioParams(uint16 _commissionInPer10000, uint16 _changingRatePer10000, uint256 _m1McashTradeRatioInBps) external onlyOwnerOrAdmin {
+        require(mcashMaxCapTrade == 0 || _changingRatePer10000 == 0 || mcashMaxCapTrade.mul(_changingRatePer10000) < BPS_MULTIPLE, "_changingRatePer10000 is set too high");
         commissionInPer10000 = _commissionInPer10000;
         changingRatePer10000 = _changingRatePer10000;
         m1McashTradeRatioInBps = _m1McashTradeRatioInBps;

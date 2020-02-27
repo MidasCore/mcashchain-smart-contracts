@@ -188,34 +188,81 @@ contract M1ToMcashUnidexSwap {
         return burnAmount;
     }
 
-    function getM1TradeAmount(uint256 mcashAmount) public view returns (uint256) {
+    function getMcashBuyAmount(uint256 m1SellAmount) public view returns (uint256) {
+        uint256 __destTradeAmount = m1SellAmount.mul(BPS_MULTIPLE).mul(10000 - commissionInPer10000).div(m1McashTradeRatioInBps).div(10000);
+
+        uint256 newDeltaRate = BPS_MULTIPLE + (__destTradeAmount * changingRatePer10000 / BPS_MULTIPLE);
+        uint256 newM1McashTradeRatioInBps = m1McashTradeRatioInBps.mul(newDeltaRate).div(BPS_MULTIPLE);
+
+        newM1McashTradeRatioInBps = m1McashTradeRatioInBps.add(newM1McashTradeRatioInBps).div(2);
+        uint256 mcashAmount = m1SellAmount.mul(BPS_MULTIPLE).mul(10000 - commissionInPer10000).div(newM1McashTradeRatioInBps).div(10000);
+
         if (burnRatePer10000 > 0) {
             uint256 burnAmount = getBurnAmount(mcashAmount);
             if (mcashAmount <= burnAmount) return 0;
             mcashAmount = mcashAmount - burnAmount;
+        }
+        return mcashAmount;
+    }
+
+    function getM1SellAmount(uint256 mcashBuyAmount) public view returns (uint256) {
+        uint256 mcashAmount;
+
+        // calculate mcashAmount before burn
+        if (burnRatePer10000 > 0) {
+            uint256 burnAmount = mcashBuyAmount.mul(burnRatePer10000).div(10000);
+            if (burnAmount < burnMinAmount) mcashAmount = mcashBuyAmount + burnMinAmount;
+            else mcashAmount = mcashBuyAmount + burnAmount;
+        } else {
+            mcashAmount = mcashBuyAmount;
+        }
+
+        uint256 newDeltaRate = BPS_MULTIPLE + (mcashAmount * changingRatePer10000 / BPS_MULTIPLE);
+        uint256 newM1McashTradeRatioInBps = m1McashTradeRatioInBps.mul(newDeltaRate).div(BPS_MULTIPLE);
+        newM1McashTradeRatioInBps = m1McashTradeRatioInBps.add(newM1McashTradeRatioInBps).div(2);
+
+        uint256 m1SellAmount = mcashAmount.mul(10000).mul(newM1McashTradeRatioInBps).div(10000 - commissionInPer10000).div(BPS_MULTIPLE);
+        return m1SellAmount;
+    }
+
+    function getM1BuyAmount(uint256 mcashSellAmount) public view returns (uint256) {
+        if (burnRatePer10000 > 0) {
+            uint256 burnAmount = getBurnAmount(mcashSellAmount);
+            if (mcashSellAmount <= burnAmount) return 0;
+            mcashSellAmount = mcashSellAmount - burnAmount;
+        }
+
+        uint256 newDeltaRate = BPS_MULTIPLE - (mcashSellAmount * 2 / BPS_MULTIPLE);
+        uint256 newM1McashTradeRatioInBps = m1McashTradeRatioInBps.mul(newDeltaRate).div(BPS_MULTIPLE);
+
+        newM1McashTradeRatioInBps = m1McashTradeRatioInBps.add(newM1McashTradeRatioInBps).div(2);
+        return mcashSellAmount.mul(newM1McashTradeRatioInBps).mul(10000 - commissionInPer10000).div(BPS_MULTIPLE).div(10000);
+    }
+
+    function getMcashSellAmount(uint256 m1BuyAmount) public view returns (uint256) {
+        // calculate approximate mcashAmount
+        uint256 mcashAmount = m1BuyAmount.mul(10000).mul(BPS_MULTIPLE).div(m1McashTradeRatioInBps).div(10000 - commissionInPer10000);
+        if (burnRatePer10000 > 0) {
+            uint256 burnAmount = mcashAmount.mul(burnRatePer10000).div(10000);
+            if (burnAmount < burnMinAmount) mcashAmount = mcashAmount + burnMinAmount;
+            else mcashAmount = mcashAmount + burnAmount;
         }
 
         uint256 newDeltaRate = BPS_MULTIPLE - (mcashAmount * changingRatePer10000 / BPS_MULTIPLE);
         uint256 newM1McashTradeRatioInBps = m1McashTradeRatioInBps.mul(newDeltaRate).div(BPS_MULTIPLE);
 
         newM1McashTradeRatioInBps = m1McashTradeRatioInBps.add(newM1McashTradeRatioInBps).div(2);
-        return mcashAmount.mul(newM1McashTradeRatioInBps).mul(10000 - commissionInPer10000).div(BPS_MULTIPLE).div(10000);
-    }
 
-    function getMcashTradeAmount(uint256 m1Amount) public view returns (uint256) {
-        uint256 __destTradeAmount = m1Amount.mul(BPS_MULTIPLE).mul(10000 - commissionInPer10000).div(m1McashTradeRatioInBps).div(10000);
+        // calculate better approx mcashAmount with new rate
+        mcashAmount = m1BuyAmount.mul(10000).mul(BPS_MULTIPLE).div(newM1McashTradeRatioInBps).div(10000 - commissionInPer10000);
 
-        uint256 newDeltaRate = BPS_MULTIPLE + (__destTradeAmount * changingRatePer10000 / BPS_MULTIPLE);
-        uint256 newM1McashTradeRatioInBps = m1McashTradeRatioInBps.mul(newDeltaRate).div(BPS_MULTIPLE);
-
-        newM1McashTradeRatioInBps = m1McashTradeRatioInBps.add(newM1McashTradeRatioInBps).div(2);
-        uint256 mcashAmount = m1Amount.mul(BPS_MULTIPLE).mul(10000 - commissionInPer10000).div(newM1McashTradeRatioInBps).div(10000);
-
+        // calculate m1Amount before burn
         if (burnRatePer10000 > 0) {
-            uint256 burnAmount = getBurnAmount(mcashAmount);
-            if (mcashAmount <= burnAmount) return 0;
-            mcashAmount = mcashAmount - burnAmount;
+            uint256 burnAmount = mcashAmount.mul(burnRatePer10000).div(10000);
+            if (burnAmount < burnMinAmount) mcashAmount = mcashAmount + burnMinAmount;
+            else mcashAmount = mcashAmount + burnAmount;
         }
+
         return mcashAmount;
     }
 
@@ -231,12 +278,12 @@ contract M1ToMcashUnidexSwap {
         if (srcTokenId == 0) {
             srcAmount = msg.value;
             require(srcAmount > 0 && srcAmount >= mcashMinCapTrade && srcAmount <= mcashMaxCapTrade, "Invalid srcAmount");
-            currentDestTradeAmount = getM1TradeAmount(srcAmount);
+            currentDestTradeAmount = getM1BuyAmount(srcAmount);
         } else {
             require(msg.tokenid == m1TokenId, "Sending not supported M1 tokens");
             srcAmount = msg.tokenvalue;
             require(srcAmount > 0 && srcAmount >= m1MinCapTrade && srcAmount <= m1MaxCapTrade, "Invalid srcAmount");
-            currentDestTradeAmount = getMcashTradeAmount(srcAmount);
+            currentDestTradeAmount = getMcashBuyAmount(srcAmount);
         }
         require(currentDestTradeAmount >= minAcceptedDestAmount, "minAcceptedDestAmount not satisfied");
         if (currentDestTradeAmount > destAmount) currentDestTradeAmount = destAmount;

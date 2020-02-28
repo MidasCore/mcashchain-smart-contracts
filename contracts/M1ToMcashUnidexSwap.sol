@@ -180,6 +180,11 @@ contract M1ToMcashUnidexSwap {
         affRatePer10000 = _affRatePer10000;
     }
 
+    function getBalance(uint256 tokenId) public view returns (uint256) {
+        if (tokenId == 0) return address(this).balance;
+        return address(this).tokenbalance(tokenId);
+    }
+
     function getBurnAmount(uint256 mcashAmount) public view returns (uint256) {
         if (burnRatePer10000 == 0) return 0;
         uint256 burnAmount = mcashAmount.mul(burnRatePer10000).div(10000);
@@ -193,8 +198,8 @@ contract M1ToMcashUnidexSwap {
 
         uint256 newDeltaRate = BPS_MULTIPLE + (__destTradeAmount * changingRatePer10000 / BPS_MULTIPLE);
         uint256 newM1McashTradeRatioInBps = m1McashTradeRatioInBps.mul(newDeltaRate).div(BPS_MULTIPLE);
-
         newM1McashTradeRatioInBps = m1McashTradeRatioInBps.add(newM1McashTradeRatioInBps).div(2);
+
         uint256 mcashAmount = m1SellAmount.mul(BPS_MULTIPLE).mul(10000 - commissionInPer10000).div(newM1McashTradeRatioInBps).div(10000);
 
         if (burnRatePer10000 > 0) {
@@ -232,35 +237,36 @@ contract M1ToMcashUnidexSwap {
             mcashSellAmount = mcashSellAmount - burnAmount;
         }
 
-        uint256 newDeltaRate = BPS_MULTIPLE - (mcashSellAmount * 2 / BPS_MULTIPLE);
+        uint256 newDeltaRate = BPS_MULTIPLE - (mcashSellAmount * changingRatePer10000 / BPS_MULTIPLE);
         uint256 newM1McashTradeRatioInBps = m1McashTradeRatioInBps.mul(newDeltaRate).div(BPS_MULTIPLE);
-
         newM1McashTradeRatioInBps = m1McashTradeRatioInBps.add(newM1McashTradeRatioInBps).div(2);
+
         return mcashSellAmount.mul(newM1McashTradeRatioInBps).mul(10000 - commissionInPer10000).div(BPS_MULTIPLE).div(10000);
     }
 
     function getMcashSellAmount(uint256 m1BuyAmount) public view returns (uint256) {
         // calculate approximate mcashAmount
         uint256 mcashAmount = m1BuyAmount.mul(10000).mul(BPS_MULTIPLE).div(m1McashTradeRatioInBps).div(10000 - commissionInPer10000);
+
         if (burnRatePer10000 > 0) {
             uint256 burnAmount = mcashAmount.mul(burnRatePer10000).div(10000);
             if (burnAmount < burnMinAmount) mcashAmount = mcashAmount + burnMinAmount;
             else mcashAmount = mcashAmount + burnAmount;
         }
-
         uint256 newDeltaRate = BPS_MULTIPLE - (mcashAmount * changingRatePer10000 / BPS_MULTIPLE);
         uint256 newM1McashTradeRatioInBps = m1McashTradeRatioInBps.mul(newDeltaRate).div(BPS_MULTIPLE);
-
         newM1McashTradeRatioInBps = m1McashTradeRatioInBps.add(newM1McashTradeRatioInBps).div(2);
 
         // calculate better approx mcashAmount with new rate
         mcashAmount = m1BuyAmount.mul(10000).mul(BPS_MULTIPLE).div(newM1McashTradeRatioInBps).div(10000 - commissionInPer10000);
 
+        uint256 mcashAmountAfterBurn = mcashAmount;
+
         // calculate m1Amount before burn
         if (burnRatePer10000 > 0) {
+            mcashAmount = mcashAmountAfterBurn.mul(10000).div(10000 - burnRatePer10000);
             uint256 burnAmount = mcashAmount.mul(burnRatePer10000).div(10000);
-            if (burnAmount < burnMinAmount) mcashAmount = mcashAmount + burnMinAmount;
-            else mcashAmount = mcashAmount + burnAmount;
+            if (burnAmount < burnMinAmount) mcashAmount = mcashAmountAfterBurn.add(burnMinAmount);
         }
 
         return mcashAmount;
